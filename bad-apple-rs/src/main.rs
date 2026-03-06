@@ -4,6 +4,7 @@ mod font;
 mod encoder;
 mod audio;
 mod printer;
+mod web_server;
 
 use clap::Parser;
 use std::process;
@@ -12,8 +13,10 @@ use std::path::Path;
 use cli::Cli;
 use encoder::{Encoder, EncoderRT, EncoderRe};
 use audio::AudioPlayer;
-use printer::{Printer, Preloader};
+use printer::{Printer, Preloader, ReactExporter, WebStreamer};
 use std::process::{Command, Stdio};
+use base64::{Engine as _, engine::general_purpose};
+use tokio::sync::broadcast;
 
 
 use crate::decoder::YoutubeFetcher;
@@ -66,6 +69,18 @@ async fn main() {
     let mut clplayer: Option<AudioPlayer> = None;
     let mut outer_printer: Option<Printer> = None;
     let mut outer_preload: Option<Preloader> = None;
+    let mut outer_react: Option<ReactExporter> = None;
+    let mut outer_web: Option<WebStreamer> = None;
+
+    if cli.web {
+        let (tx, _rx) = broadcast::channel(16);
+        let port = cli.web_port;
+        let tx_spawn = tx.clone();
+        tokio::spawn(async move {
+            web_server::start_server(port, tx_spawn).await;
+        });
+        outer_web = Some(WebStreamer::new(tx));
+    }
 
     let is_badapple_ext = cli.input.ends_with(".badapple");
     
@@ -125,9 +140,23 @@ async fn main() {
             break;
         }
 
-        // Initialize Audio and Timer on the very first frame to ensure perfect sync
+        // Initialize Exporters/Players on the very first frame
         if i == 0 {
-            if !preload {
+            if cli.react {
+                let mut audio_b64 = None;
+                let mut audio_type = "audio/mpeg".to_string();
+                
+                if !audio_input.is_empty() && Path::new(&audio_input).exists() {
+                     if let Ok(data) = std::fs::read(&audio_input) {
+                         audio_b64 = Some(general_purpose::STANDARD.encode(data));
+                         if audio_input.ends_with(".wav") {
+                             audio_type = "audio/wav".to_string();
+                         }
+                     }
+                }
+
+                outer_react = Some(ReactExporter::new(&cli.react_output, 1.0e6 / clk as f64, audio_b64, &audio_type));
+            } else if !preload {
                 clplayer = Some(AudioPlayer::new(&video_input, audio_input.clone(), cli.player.clone(), false, &ffmpeg_path));
                 outer_printer = Some(Printer::new(clk, cli.not_clear));
             } else {
@@ -159,6 +188,12 @@ async fn main() {
             p.print_a_frame(&buf[0..buf_size]);
         } else if let Some(ref mut p) = outer_printer {
             p.print_a_frame(&buf[0..buf_size]);
+        } else if let Some(ref mut p) = outer_react {
+            p.add_frame(&buf[0..buf_size]);
+        }
+        
+        if let Some(ref mut p) = outer_web {
+            p.add_frame(&buf[0..buf_size]);
         }
         
         frame_sent += 1;
@@ -173,6 +208,9 @@ async fn main() {
     enc.cls();
     if let Some(mut p) = clplayer {
         p.terminate();
+    }
+    if let Some(p) = outer_react {
+        let _ = p.save();
     }
 }
 

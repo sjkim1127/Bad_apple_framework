@@ -61,6 +61,22 @@ pub struct Cli {
     #[arg(long)]
     pub bloom: bool,
 
+    /// generate React component (.tsx)
+    #[arg(long)]
+    pub react: bool,
+
+    /// output file for React component (.tsx)
+    #[arg(long, default_value = "BadAppleAnim.tsx")]
+    pub react_output: String,
+
+    /// host as a real-time web streamer
+    #[arg(long)]
+    pub web: bool,
+
+    /// web server port
+    #[arg(long, default_value_t = 8080)]
+    pub web_port: u16,
+
     /// [debug]
     #[arg(long = "debug")]
     pub debug: bool,

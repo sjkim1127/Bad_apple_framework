@@ -1,75 +1,85 @@
-# 🍎 Bad Apple!! Rust (bad-apple-rs)
+# 🍎 Bad-Apple-RS: Ultimate ASCII Video Engine
 
-> **"A ultra-high-performance, feature-rich ASCII player reborn in Rust."**
+![Bad Apple React Theme](https://raw.githubusercontent.com/sjkim1127/Bad_apple_framework/main/bad_apple_react_ui_mockup.png)
 
-This project is a modern migration and significant enhancement of the classic "Bad Apple!!" terminal player. Built with performance in mind using Rust, it extends beyond simple grayscale to support **24-bit True Color**, **ASCII Shaders**, **YouTube streaming**, and **Half-Block High-Resolution** rendering.
+A high-performance, feature-rich **Bad Apple!!** animation renderer written in Rust. This project transforms any video (or YouTube URL) into stunning ASCII art across multiple platforms: Terminal, React Web Components, and Real-time Web Streams.
 
-![Play Demo](play.gif)
+---
 
 ## ✨ Key Features
 
-* **⚡ Parallel Rendering Engine (Rayon)**: Leverages multi-core processing to convert video frames into ASCII in parallel, ensuring smooth 60fps playback even at ultra-high resolutions.
-* **▀ Half-Block High-Resolution**: Doubles vertical resolution using ANSI half-block (`▀`) characters, providing near-video quality clarity within a text terminal.
-* **🎨 24-bit True Color RGB**: Full 24-bit color support. Use the `--color` flag for vibrant, stunning terminal art.
-* **✨ ASCII Shaders & Post-processing**:
-  * **Scanlines**: Authentic CRT-style monitor effects.
-  * **Noise/Glitch**: Cyberpunk-style grain and texture.
-  * **Bloom**: Elegant glow effects around bright areas using background color bleed.
-* **📺 YouTube Direct Streaming**: Stream directly from the web. Just paste a YouTube URL and play in real-time. (Automatic `yt-dlp` management included).
-* **📦 100% Standalone (Portable)**: `ffmpeg` and `ffprobe` binaries are embedded directly into the executable. No external dependencies required.
-* **🔊 Native A/V Sync**: Direct audio output using `rodio` with a custom frame-skipping logic to ensure zero-lag synchronization.
+### 1. 🚀 High-Performance Rendering
 
-## 🚀 Performance Optimizations
+- **Pure Rust Core**: Lightning-fast video decoding and ASCII transformation using `rayon` for parallel processing.
+- **24-bit True Color**: Supports full RGB ASCII rendering for colorful videos.
+- **A/V Sync**: Perfectly synchronized audio playback with frame-skipping logic to prevent lag.
 
-This player is engineered for maximum speed:
+### 2. 🎮 Real-time Web Streamer (Rust-to-Web Bridge)
 
-* **Zero-allocation Formatting**: Replaced `format!` with high-speed integer-to-string conversion, eliminating thousands of heap allocations per frame.
-* **Persistent I/O Locking**: Locks `stdout` once per session and uses a massive `BufWriter` (1MB) to flood the terminal with data efficiently.
-* **Memory Reuse**: Dedicated row buffers are pre-allocated and reused, effectively reaching constant memory usage during playback.
+- **WebSocket Streaming**: Stream live ASCII frames from Rust to your browser in real-time.
+- **Canvas-based Viewer**: High-performance rendering with **Emoji Mode (🍎/🍏)** and CRT filters.
+- **Interactive Controls**: Toggle scanlines, change color filters (Amber, Green, Cyan), and more via a live web dashboard.
 
-## 🚀 Getting Started
+### 3. ⚛️ React Component Exporter
 
-### Build from Source
+- **Zero-Dependency .tsx**: Generate a single standalone React file containing all frame data and audio (Base64).
+- **Cyberpunk Dashboard UI**: Includes a built-in retro interface with zoom, volume, and visual effects.
+- **Frame-Audio Sync**: Re-syncs animation frames to the audio `currentTime` for millisecond precision.
 
-Ensure you have the Rust toolchain installed.
+### 4. 📺 YouTube Streaming
 
-> [!IMPORTANT]
-> To build the standalone version:
->
-> 1. Create a `bin` folder in the project root.
-> 2. Copy `ffmpeg.exe` and `ffprobe.exe` into the `bin` folder.
-> 3. Run: `cargo build --release`
-
-```powershell
-# Build and run with all the bells and whistles
-cargo run --release -- -i "https://youtu.be/7gxkOp7R6jc" --color --bloom --scanlines
-```
-
-## 🛠 Command Line Arguments
-
-| Argument | Description | Default |
-| :--- | :--- | :--- |
-| `-i, --input` | Path to video file or YouTube URL | `badapple.mp4` |
-| `--color` | **Enable 24-bit True Color mode** | `false` |
-| `--scanlines` | Enable CRT-style scanline effect | `false` |
-| `--noise` | Enable grain/noise effect | `false` |
-| `--bloom` | Enable glow/light bleed effect | `false` |
-| `-r, --rate` | Playback speed (e.g., 2.0 = 2x speed) | `1.0` |
-| `--contrast` | Enhance grayscale contrast | `false` |
-| `--preload` | Pre-encode to `.badapple` format | `false` |
-| `--not-clear` | Append output instead of clearing screen | `false` |
-
-## 📐 System Requirements
-
-* **OS**: Windows 10/11 (Optimized for Windows environment)
-* **Terminal**: **Windows Terminal** (Highly recommended for True Color & HQ), PowerShell, or CMD.
-
-## 🤝 Credits
-
-* **Rayon**: Parallel processing engine.
-* **FFmpeg**: Media decoding engine.
-* **yt-dlp**: YouTube stream extraction.
-* **Rodio**: Rust native audio playback.
+- Direct playback from YouTube URLs using `yt-dlp` integration. No need to download videos manually.
 
 ---
-Developed with ❤️ by Antigravity (Advanced Agentic Coding @ DeepMind)
+
+## 🛠️ Installation & Setup
+
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) (latest stable)
+- [FFmpeg](https://ffmpeg.org/download.html) (Ensure it's in your PATH)
+
+### Quick Start
+
+```powershell
+# Clone the repository
+git clone https://github.com/sjkim1127/Bad_apple_framework.git
+cd Bad_apple_framework/bad-apple-rs
+
+# Run in terminal (Classic)
+cargo run --release -- -i badapple.mp4 -s 64:32
+
+# Run as Real-time Web Streamer (Emoji Mode ready!)
+cargo run --release -- -i badapple.mp4 --web
+```
+
+---
+
+## 📖 CLI Usage Options
+
+| Flag | Description |
+| :--- | :--- |
+| `-i, --input` | Video file path or YouTube URL. |
+| `-a, --audio` | Audio file path for sync. |
+| `-s, --scale` | Output resolution (e.g., `80:40`). |
+| `--color` | Enable 24-bit True Color rendering. |
+| `--web` | Start the real-time WebSocket web streamer. |
+| `--react` | Export as a standalone React (.tsx) component. |
+| `--react-output` | Specify the path for the React component. |
+
+---
+
+## 🎨 Visual Effects
+
+- **Scanlines**: Emulates retro CRT monitor scanlines.
+- **Bloom & Noise**: Adds organic texture and glow to the ASCII characters.
+- **CRT Filter**: Choose between Classic Green, Amber, or Cyan themes.
+
+---
+
+## 🤝 Contribution
+
+Feel free to open issues or submit pull requests. Let's make the best ASCII engine together!
+
+**License**: MIT
+**Author**: sjkim1127
