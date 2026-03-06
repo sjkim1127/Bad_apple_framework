@@ -1,6 +1,6 @@
-use std::io::{Write, stdout};
 use std::time::{Instant, Duration};
 use std::thread;
+use std::io::{Write, stdout, StdoutLock, BufWriter};
 
 pub struct Timer {
     clk_ns: u64,
@@ -52,37 +52,38 @@ impl Timer {
 pub struct Printer {
     timer: Timer,
     not_clear: bool,
+    writer: BufWriter<StdoutLock<'static>>,
 }
 
 impl Printer {
     pub fn new(clk_us: u64, not_clear: bool) -> Self {
         let mut timer = Timer::new(clk_us);
         
-        let mut stdout = stdout();
+        let stdout_obj = Box::leak(Box::new(stdout()));
+        let mut lock = stdout_obj.lock();
+        
         if not_clear {
-            writeln!(stdout).unwrap();
+            writeln!(lock).unwrap();
         } else {
-            write!(stdout, "\x1b[256F\x1b[0J").unwrap();
+            write!(lock, "\x1b[?25l\x1b[2J\x1b[H").unwrap(); // Hide cursor, clear screen, move home
         }
-        stdout.flush().unwrap();
+        lock.flush().unwrap();
         
         timer.bg();
         
         Self {
             timer,
             not_clear,
+            writer: BufWriter::with_capacity(1024 * 1024, lock), // 1MB Buffer
         }
     }
 
     pub fn print_a_frame(&mut self, buffer: &[u8]) {
-        let mut stdout = stdout();
-        if self.not_clear {
-            writeln!(stdout).unwrap();
-        } else {
-            write!(stdout, "\x1b[?25l\x1b[H").unwrap(); // Hide cursor and Move home
+        if !self.not_clear {
+            let _ = write!(self.writer, "\x1b[H"); // Move home
         }
-        stdout.write_all(buffer).unwrap();
-        stdout.flush().unwrap();
+        let _ = self.writer.write_all(buffer);
+        let _ = self.writer.flush();
         
         self.timer.wait();
     }

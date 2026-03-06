@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use crate::decoder::DecoderFFmpeg;
 use crate::font::Font;
+use rayon::prelude::*;
 
 pub trait Encoder {
     fn read_a_frame(&mut self) -> Result<(), ()>;
@@ -27,6 +28,11 @@ pub struct EncoderRT {
     frame_buf: Vec<u8>,
     print_buf: Vec<u8>,
     print_size: usize,
+    scanlines: bool,
+    noise: bool,
+    bloom: bool,
+    frame_count: u64,
+    row_bufs: Vec<Vec<u8>>,
 }
 
 impl EncoderRT {
@@ -37,6 +43,9 @@ impl EncoderRT {
         fps: f64,
         contrast: bool,
         color: bool,
+        scanlines: bool,
+        noise: bool,
+        bloom: bool,
         ffmpeg_path: String,
         ffprobe_path: String,
         name: &str,
@@ -96,7 +105,9 @@ impl EncoderRT {
 
         decoder.ready_to_read(x, y, color)?;
 
-        let bytes_per_char = if color { 20 } else { 1 };
+        let bytes_per_char = if color { 
+            if bloom { 44 } else { 20 } 
+        } else { 1 };
         let print_size = (x as usize * bytes_per_char + 1) * (y as usize / 2);
         let frame_buf_size = if color { xy * 3 } else { xy };
         
@@ -114,84 +125,185 @@ impl EncoderRT {
             clk,
             mo,
             frame_buf,
-            print_buf,
-            print_size,
+            print_buf: Vec::new(),
+            print_size: 0,
+            scanlines,
+            noise,
+            bloom,
+            frame_count: 0,
+            row_bufs: (0..(y / 2)).map(|_| Vec::with_capacity(x as usize * 40)).collect(),
         })
+    }
+
+    fn write_u8(vec: &mut Vec<u8>, mut n: u8) {
+        if n >= 100 {
+            vec.push(b'0' + (n / 100));
+            n %= 100;
+            vec.push(b'0' + (n / 10));
+            vec.push(b'0' + (n % 10));
+        } else if n >= 10 {
+            vec.push(b'0' + (n / 10));
+            vec.push(b'0' + (n % 10));
+        } else {
+            vec.push(b'0' + n);
+        }
     }
 }
 
 impl Encoder for EncoderRT {
     fn read_a_frame(&mut self) -> Result<(), ()> {
+        self.frame_count += 1;
         self.decoder.read_a_frame(&mut self.frame_buf).map_err(|_| ())
     }
 
     fn refresh_buffer(&mut self) {
         if self.contrast && !self.color {
-            let mut max_pixel = 0u8;
-            let mut min_pixel = 255u8;
-            for &p in &self.frame_buf {
-                if p > max_pixel { max_pixel = p; }
-                if p < min_pixel { min_pixel = p; }
-            }
+            let (max_pixel, min_pixel) = self.frame_buf.par_iter().fold(
+                || (0u8, 255u8),
+                |(max_p, min_p), &p| (max_p.max(p), min_p.min(p))
+            ).reduce(
+                || (0u8, 255u8),
+                |(max1, min1), (max2, min2)| (max1.max(max2), min1.min(min2))
+            );
 
             if max_pixel != min_pixel {
                 let range = max_pixel - min_pixel;
-                for p in &mut self.frame_buf {
+                self.frame_buf.par_iter_mut().for_each(|p| {
                     *p = ((*p - min_pixel) as u16 * 255 / range as u16) as u8;
-                }
+                });
             } else {
                 let fill = if max_pixel & 128 != 0 { 255 } else { 0 };
-                for p in &mut self.frame_buf {
+                self.frame_buf.par_iter_mut().for_each(|p| {
                     *p = fill;
-                }
+                });
             }
         }
 
-        let mut t = 0;
         let x = self.x as usize;
         let y = self.y as usize;
+        let color = self.color;
+        let scanlines = self.scanlines;
+        let noise = self.noise;
+        let bloom = self.bloom;
+        let frame_count = self.frame_count;
 
-        for j in 0..(y / 2) {
+        let bytes_per_pixel = if color { 3 } else { 1 };
+        let _bytes_per_char_hint = if color { if bloom { 45 } else { 21 } } else { 2 };
+
+        // Process rows in parallel using persistent buffers
+        let frame_buf = &self.frame_buf;
+        let fnt = &self.fnt;
+
+        self.row_bufs.par_iter_mut().enumerate().for_each(|(j, row)| {
+            row.clear();
+            let mut seed = (frame_count ^ (j as u64)) as u32;
+
+            // Cache previous colors to skip redundant ANSI codes
+            let mut last_fg = (256u16, 256u16, 256u16);
+            let mut last_bg = (256u16, 256u16, 256u16);
+
             for k in 0..x {
-                if self.color {
-                    let up_r = self.frame_buf[((j * 2) * x + k) * 3];
-                    let up_g = self.frame_buf[((j * 2) * x + k) * 3 + 1];
-                    let up_b = self.frame_buf[((j * 2) * x + k) * 3 + 2];
+                if color {
+                    let up_idx = ((j * 2) * x + k) * bytes_per_pixel;
+                    let dn_idx = ((j * 2 + 1) * x + k) * bytes_per_pixel;
+
+                    let mut up_r = frame_buf[up_idx];
+                    let mut up_g = frame_buf[up_idx + 1];
+                    let mut up_b = frame_buf[up_idx + 2];
                     
-                    let dn_r = self.frame_buf[((j * 2 + 1) * x + k) * 3];
-                    let dn_g = self.frame_buf[((j * 2 + 1) * x + k) * 3 + 1];
-                    let dn_b = self.frame_buf[((j * 2 + 1) * x + k) * 3 + 2];
+                    let mut dn_r = frame_buf[dn_idx];
+                    let mut dn_g = frame_buf[dn_idx + 1];
+                    let mut dn_b = frame_buf[dn_idx + 2];
 
-                    let up_lum = (0.299 * up_r as f32 + 0.587 * up_g as f32 + 0.114 * up_b as f32) as u8;
-                    let dn_lum = (0.299 * dn_r as f32 + 0.587 * dn_g as f32 + 0.114 * dn_b as f32) as u8;
-                    let ch = self.fnt.get(up_lum, dn_lum);
+                    if noise {
+                        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                        let noise_val = (seed % 30) as i16 - 15;
+                        up_r = (up_r as i16 + noise_val).clamp(0, 255) as u8;
+                        up_g = (up_g as i16 + noise_val).clamp(0, 255) as u8;
+                        up_b = (up_b as i16 + noise_val).clamp(0, 255) as u8;
+                        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                        let noise_val_dn = (seed % 30) as i16 - 15;
+                        dn_r = (dn_r as i16 + noise_val_dn).clamp(0, 255) as u8;
+                        dn_g = (dn_g as i16 + noise_val_dn).clamp(0, 255) as u8;
+                        dn_b = (dn_b as i16 + noise_val_dn).clamp(0, 255) as u8;
+                    }
 
-                    let avg_r = ((up_r as u16 + dn_r as u16) / 2) as u8;
-                    let avg_g = ((up_g as u16 + dn_g as u16) / 2) as u8;
-                    let avg_b = ((up_b as u16 + dn_b as u16) / 2) as u8;
+                    if scanlines && j % 2 == 0 {
+                        up_r = (up_r as u16 * 7 / 10) as u8;
+                        up_g = (up_g as u16 * 7 / 10) as u8;
+                        up_b = (up_b as u16 * 7 / 10) as u8;
+                        dn_r = (dn_r as u16 * 7 / 10) as u8;
+                        dn_g = (dn_g as u16 * 7 / 10) as u8;
+                        dn_b = (dn_b as i16 * 7 / 10) as u8;
+                    }
 
-                    self.print_buf[t] = b'\x1b';
-                    self.print_buf[t+1] = b'[';
-                    self.print_buf[t+2] = b'3'; self.print_buf[t+3] = b'8'; self.print_buf[t+4] = b';'; self.print_buf[t+5] = b'2'; self.print_buf[t+6] = b';';
-                    self.print_buf[t+7] = b'0' + (avg_r / 100) % 10; self.print_buf[t+8] = b'0' + (avg_r / 10) % 10; self.print_buf[t+9] = b'0' + (avg_r % 10);
-                    self.print_buf[t+10] = b';';
-                    self.print_buf[t+11] = b'0' + (avg_g / 100) % 10; self.print_buf[t+12] = b'0' + (avg_g / 10) % 10; self.print_buf[t+13] = b'0' + (avg_g % 10);
-                    self.print_buf[t+14] = b';';
-                    self.print_buf[t+15] = b'0' + (avg_b / 100) % 10; self.print_buf[t+16] = b'0' + (avg_b / 10) % 10; self.print_buf[t+17] = b'0' + (avg_b % 10);
-                    self.print_buf[t+18] = b'm';
+                    // Bloom effect integration: Boost colors if bright
+                    if bloom {
+                        let up_lum = (up_r as u16 + up_g as u16 + up_b as u16) / 3;
+                        let dn_lum = (dn_r as u16 + dn_g as u16 + dn_b as u16) / 3;
+                        if up_lum > 180 {
+                            up_r = up_r.saturating_add(30); up_g = up_g.saturating_add(30); up_b = up_b.saturating_add(30);
+                        }
+                        if dn_lum > 180 {
+                            dn_r = dn_r.saturating_add(30); dn_g = dn_g.saturating_add(30); dn_b = dn_b.saturating_add(30);
+                        }
+                    }
 
-                    self.print_buf[t+19] = ch;
-                    t += 20;
+                    // Set Foreground Color (Top pixel)
+                    if (up_r as u16, up_g as u16, up_b as u16) != last_fg {
+                        row.extend_from_slice(b"\x1b[38;2;");
+                        Self::write_u8(row, up_r);
+                        row.push(b';');
+                        Self::write_u8(row, up_g);
+                        row.push(b';');
+                        Self::write_u8(row, up_b);
+                        row.push(b'm');
+                        last_fg = (up_r as u16, up_g as u16, up_b as u16);
+                    }
+
+                    // Set Background Color (Bottom pixel)
+                    if (dn_r as u16, dn_g as u16, dn_b as u16) != last_bg {
+                        row.extend_from_slice(b"\x1b[48;2;");
+                        Self::write_u8(row, dn_r);
+                        row.push(b';');
+                        Self::write_u8(row, dn_g);
+                        row.push(b';');
+                        Self::write_u8(row, dn_b);
+                        row.push(b'm');
+                        last_bg = (dn_r as u16, dn_g as u16, dn_b as u16);
+                    }
+
+                    // Print Half block character
+                    row.extend_from_slice("▀".as_bytes());
                 } else {
-                    let up = self.frame_buf[(j * 2) * x + k];
-                    let down = self.frame_buf[(j * 2 + 1) * x + k];
-                    self.print_buf[t] = self.fnt.get(up, down);
-                    t += 1;
+                    let mut up = frame_buf[(j * 2) * x + k];
+                    let mut down = frame_buf[(j * 2 + 1) * x + k];
+
+                    if noise {
+                        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                        let noise_val = (seed % 20) as i16 - 10;
+                        up = (up as i16 + noise_val).clamp(0, 255) as u8;
+                        down = (down as i16 + noise_val).clamp(0, 255) as u8;
+                    }
+
+                    if scanlines && j % 2 == 0 {
+                        up = (up as u16 * 7 / 10) as u8;
+                        down = (down as u16 * 7 / 10) as u8;
+                    }
+
+                    row.push(fnt.get(up, down));
                 }
             }
-            self.print_buf[t] = b'\n';
-            t += 1;
+            // Reset colors at the end of each row to prevent bleeding
+            row.extend_from_slice(b"\x1b[0m\n");
+        });
+
+        // Flatten all rows into the main print buffer
+        self.print_buf.clear();
+        for row in &self.row_bufs {
+            self.print_buf.extend_from_slice(row);
         }
+        self.print_size = self.print_buf.len();
     }
 
     fn buffer(&self) -> &[u8] {

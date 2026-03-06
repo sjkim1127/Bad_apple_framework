@@ -49,6 +49,18 @@ pub struct Cli {
     #[arg(long = "preload")]
     pub preload: bool,
 
+    /// enable scanlines effect
+    #[arg(long)]
+    pub scanlines: bool,
+
+    /// enable noise effect
+    #[arg(long)]
+    pub noise: bool,
+
+    /// enable bloom effect
+    #[arg(long)]
+    pub bloom: bool,
+
     /// [debug]
     #[arg(long = "debug")]
     pub debug: bool,
