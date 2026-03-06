@@ -1,0 +1,10 @@
+/target/
+/target_final/
+/target_tmp/
+/bin/
+build_error.txt
+check_error.txt
+temp_youtube_audio.wav
+*.badapple
+badapple.mp4
+badapple.wav
