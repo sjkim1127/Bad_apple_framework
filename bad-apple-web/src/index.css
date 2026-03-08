@@ -1,0 +1,191 @@
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #050505;
+  color: #0f0;
+  font-family: 'Courier New', Courier, monospace;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at center, #111 0%, #000 100%);
+  position: relative;
+}
+
+/* Background Cyberpunk Grid Grid */
+.app-container::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(#0f0 1px, transparent 1px),
+    linear-gradient(90deg, #0f0 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.03;
+  pointer-events: none;
+}
+
+.cyberpunk-dashboard {
+  background: rgba(0, 20, 0, 0.4);
+  border: 1px solid #0f0;
+  box-shadow: 0 0 30px rgba(0, 255, 0, 0.2), inset 0 0 20px rgba(0, 255, 0, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 30px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  z-index: 10;
+}
+
+.glitch-title {
+  font-size: 2.5rem;
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 5px;
+  text-shadow: 0 0 10px #0f0;
+  position: relative;
+}
+
+.control-panel {
+  display: flex;
+  gap: 15px;
+  width: 100%;
+}
+
+.neon-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #0f0;
+  color: #fff;
+  padding: 15px;
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.neon-input:focus {
+  box-shadow: 0 0 15px #0f0;
+  background: rgba(0, 20, 0, 0.8);
+}
+
+.neon-button {
+  background: transparent;
+  color: #0f0;
+  border: 1px solid #0f0;
+  padding: 15px 30px;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.neon-button:hover:not(:disabled) {
+  background: #0f0;
+  color: #000;
+  box-shadow: 0 0 20px #0f0;
+}
+
+.neon-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.error-box {
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px dashed #f00;
+  color: #f00;
+  padding: 10px;
+  text-align: center;
+}
+
+.toggles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  padding: 15px;
+  background: rgba(0, 255, 0, 0.05);
+  border: 1px solid rgba(0, 255, 0, 0.2);
+}
+
+.cyber-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.cyber-checkbox:hover {
+  opacity: 1;
+}
+
+.cyber-checkbox input {
+  display: none;
+}
+
+.cyber-checkbox .box {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #0f0;
+  display: inline-block;
+  position: relative;
+}
+
+.cyber-checkbox input:checked + .box::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px; right: 2px; bottom: 2px;
+  background: #0f0;
+  box-shadow: 0 0 8px #0f0;
+}
+
+.viewport {
+  width: 100%;
+  height: 65vh;
+  background: #000;
+  border: 1px solid rgba(0, 255, 0, 0.5);
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 1);
+}
+
+.ascii-display {
+  margin: 0;
+  font-size: 7px;
+  line-height: 1; /* Match the vertical size perfectly */
+  white-space: pre;
+  user-select: none;
+  font-weight: bold;
+}
+
+.viewport-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 5;
+}

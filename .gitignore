@@ -1,0 +1,6 @@
+.vercel
+.env*.local
+
+/bad-apple-web/node_modules
+/bad-apple-wasm/target
+/bad-apple-web/dist

@@ -1,6 +1,6 @@
-use std::time::{Instant, Duration};
+use std::io::{BufWriter, StdoutLock, Write, stdout};
 use std::thread;
-use std::io::{Write, stdout, StdoutLock, BufWriter};
+use std::time::{Duration, Instant};
 
 pub struct Timer {
     clk_ns: u64,
@@ -38,11 +38,11 @@ impl Timer {
         if let Some(start) = self.start {
             let target = Duration::from_nanos(self.clk_ns);
             let now = Instant::now();
-            
+
             if now < start + target {
                 thread::sleep((start + target).duration_since(now));
             }
-            
+
             // Sync start to current frame slot
             self.start = Some(start + target);
         }
@@ -58,19 +58,19 @@ pub struct Printer {
 impl Printer {
     pub fn new(clk_us: u64, not_clear: bool) -> Self {
         let mut timer = Timer::new(clk_us);
-        
+
         let stdout_obj = Box::leak(Box::new(stdout()));
         let mut lock = stdout_obj.lock();
-        
+
         if not_clear {
             writeln!(lock).unwrap();
         } else {
             write!(lock, "\x1b[?25l\x1b[2J\x1b[H").unwrap(); // Hide cursor, clear screen, move home
         }
         lock.flush().unwrap();
-        
+
         timer.bg();
-        
+
         Self {
             timer,
             not_clear,
@@ -84,7 +84,7 @@ impl Printer {
         }
         let _ = self.writer.write_all(buffer);
         let _ = self.writer.flush();
-        
+
         self.timer.wait();
     }
 
@@ -102,10 +102,10 @@ pub struct Preloader {
 impl Preloader {
     pub fn new(output: &str, x: i32, y: i32, clk: u64) -> Result<Self, String> {
         let mut fp = File::create(output).map_err(|e| format!("Open output file failed: {}", e))?;
-        
+
         // Write header: "width (height/2) clk\n"
         write!(fp, "{} {} {}\n", x, y / 2, clk).map_err(|e| e.to_string())?;
-        
+
         Ok(Self { fp })
     }
 
@@ -135,18 +135,18 @@ impl ReactExporter {
 
     pub fn add_frame(&mut self, buffer: &[u8]) {
         let s = String::from_utf8_lossy(buffer).to_string();
-        
+
         // Strip ANSI escape codes (e.g., \x1b[38;2;...m, \x1b[0m)
         // This ensures the React component renders clean text without visible escape sequences.
         let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
         let stripped = ansi_regex.replace_all(&s, "").to_string();
-        
+
         self.frames.push(stripped);
     }
 
     pub fn save(self) -> std::io::Result<()> {
         let mut fp = File::create(&self.output)?;
-        
+
         let frames_json = serde_json::to_string(&self.frames)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -156,7 +156,8 @@ impl ReactExporter {
             "".to_string()
         };
 
-        let template = format!(r#"
+        let template = format!(
+            r#"
 import React, {{ useState, useEffect, useRef }} from 'react';
 
 /**
@@ -215,15 +216,15 @@ export const BadAppleAnim: React.FC = () => {{
             position: 'relative'
         }}}}>
             
-            {/* Background Grid */}
+            {{/* Background Grid */}}
             <div style={{{{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                backgroundImage: `linear-gradient(${filter}22 1px, transparent 1px), linear-gradient(90deg, ${filter}22 1px, transparent 1px)`,
+                backgroundImage: `linear-gradient(${{filter}}22 1px, transparent 1px), linear-gradient(90deg, ${{filter}}22 1px, transparent 1px)`,
                 backgroundSize: '40px 40px',
                 zIndex: 0
             }}}} />
 
-            {!started && (
+            {{!started && (
                 <div style={{{{
                     position: 'absolute',
                     zIndex: 100,
@@ -253,9 +254,9 @@ export const BadAppleAnim: React.FC = () => {{
                     </button>
                     <p style={{{{ marginTop: '20px', fontSize: '12px' }}}}>Click to synchronize neural audio-visual data</p>
                 </div>
-            )}
+            )}}
 
-            {/* DASHBOARD UI */}
+            {{/* DASHBOARD UI */}}
             <div style={{{{
                 zIndex: 10,
                 width: '90%',
@@ -264,13 +265,13 @@ export const BadAppleAnim: React.FC = () => {{
                 flexDirection: 'column',
                 gap: '20px'
             }}}}>
-                {/* Header Info */}
+                {{/* Header Info */}}
                 <div style={{{{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${{filter}}44`, paddingBottom: '10px' }}}}>
                     <div>LOG://BAD_APPLE.EXE</div>
                     <div style={{{{ opacity: 0.8 }}}}>STATUS: {{started ? 'STREAMING' : 'IDLE'}} | FRAME: {{currentFrame}} / {{frames.length}}</div>
                 </div>
 
-                {/* Main Viewport */}
+                {{/* Main Viewport */}}
                 <div style={{{{
                     position: 'relative',
                     border: `1px solid ${{filter}}88`,
@@ -283,7 +284,7 @@ export const BadAppleAnim: React.FC = () => {{
                 }}}}>
                      <audio ref={{audioRef}} src={{AUDIO_SRC}} loop />
                      
-                     {scanlines && (
+                     {{scanlines && (
                          <div style={{{{
                             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                             background: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)',
@@ -291,7 +292,7 @@ export const BadAppleAnim: React.FC = () => {{
                             pointerEvents: 'none',
                             zIndex: 5
                          }}}} />
-                     )}
+                     )}}
 
                      <pre 
                          style={{{{
@@ -310,7 +311,7 @@ export const BadAppleAnim: React.FC = () => {{
                      </pre>
                 </div>
 
-                {/* Control Panel */}
+                {{/* Control Panel */}}
                 <div style={{{{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -327,10 +328,10 @@ export const BadAppleAnim: React.FC = () => {{
                     <div>
                         <label style={{{{ display: 'block', fontSize: '10px', marginBottom: '5px' }}}}>VISUAL FILTER</label>
                         <div style={{{{ display: 'flex', gap: '10px' }}}}>
-                            {['#0f0', '#ffb000', '#00ffff', '#fff'].map(c => (
+                            {{['#0f0', '#ffb000', '#00ffff', '#fff'].map(c => (
                                 <div key={{c}} onClick={{() => setFilter(c)}} 
                                      style={{{{ width: '20px', height: '20px', background: c, border: filter === c ? '2px solid white' : 'none', cursor: 'pointer' }}}} />
-                            ))}
+                            ))}}
                         </div>
                     </div>
                     <div>
@@ -363,7 +364,9 @@ export const BadAppleAnim: React.FC = () => {{
 }};
 
 export default BadAppleAnim;
-"#, frames_json, audio_src, self.fps);
+"#,
+            frames_json, audio_src, self.fps
+        );
 
         fp.write_all(template.as_bytes())?;
         println!("React component saved to: {}", self.output);
@@ -382,11 +385,11 @@ impl WebStreamer {
 
     pub fn add_frame(&self, buffer: &[u8]) {
         let s = String::from_utf8_lossy(buffer).to_string();
-        
+
         // Strip ANSI escape codes for clean browser rendering
         let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
         let stripped = ansi_regex.replace_all(&s, "").to_string();
-        
+
         // Broadcast the frame
         let _ = self.tx.send(stripped);
     }

@@ -1,23 +1,22 @@
+mod audio;
 mod cli;
 mod decoder;
-mod font;
 mod encoder;
-mod audio;
+mod font;
 mod printer;
 mod web_server;
 
 use clap::Parser;
-use std::process;
 use std::path::Path;
+use std::process;
 
+use audio::AudioPlayer;
+use base64::{Engine as _, engine::general_purpose};
 use cli::Cli;
 use encoder::{Encoder, EncoderRT, EncoderRe};
-use audio::AudioPlayer;
-use printer::{Printer, Preloader, ReactExporter, WebStreamer};
+use printer::{Preloader, Printer, ReactExporter, WebStreamer};
 use std::process::{Command, Stdio};
-use base64::{Engine as _, engine::general_purpose};
 use tokio::sync::broadcast;
-
 
 use crate::decoder::YoutubeFetcher;
 
@@ -31,19 +30,19 @@ async fn main() {
     if cli.is_url() {
         // Find or Download yt-dlp
         let ytdlp_exe = match find_or_download_ytdlp(cli.ytdlp_path.clone().as_deref()).await {
-             Ok(p) => p,
-             Err(e) => {
-                  eprintln!("Error getting yt-dlp: {}", e);
-                  process::exit(1);
-             }
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Error getting yt-dlp: {}", e);
+                process::exit(1);
+            }
         };
-        
+
         println!("Fetching stream URL from YouTube/URL...");
         match YoutubeFetcher::fetch_stream_url(&cli.input, Some(ytdlp_exe)).await {
             Ok((v_url, a_url)) => {
                 video_input = v_url;
                 audio_input = a_url;
-            },
+            }
             Err(e) => {
                 eprintln!("YouTube error: {}", e);
                 process::exit(1);
@@ -56,7 +55,7 @@ async fn main() {
 
     let mut preload = cli.preload;
     let mut output = cli.output.clone();
-    
+
     if !output.is_empty() {
         preload = true;
     } else if preload {
@@ -83,7 +82,7 @@ async fn main() {
     }
 
     let is_badapple_ext = cli.input.ends_with(".badapple");
-    
+
     let mut enc: Box<dyn Encoder> = if is_badapple_ext {
         if preload {
             eprintln!("Video file is already preloaded.");
@@ -119,7 +118,7 @@ async fn main() {
             }
         }
     };
-    
+
     // Core playback remains essentially the same.
     // ...
 
@@ -145,19 +144,30 @@ async fn main() {
             if cli.react {
                 let mut audio_b64 = None;
                 let mut audio_type = "audio/mpeg".to_string();
-                
+
                 if !audio_input.is_empty() && Path::new(&audio_input).exists() {
-                     if let Ok(data) = std::fs::read(&audio_input) {
-                         audio_b64 = Some(general_purpose::STANDARD.encode(data));
-                         if audio_input.ends_with(".wav") {
-                             audio_type = "audio/wav".to_string();
-                         }
-                     }
+                    if let Ok(data) = std::fs::read(&audio_input) {
+                        audio_b64 = Some(general_purpose::STANDARD.encode(data));
+                        if audio_input.ends_with(".wav") {
+                            audio_type = "audio/wav".to_string();
+                        }
+                    }
                 }
 
-                outer_react = Some(ReactExporter::new(&cli.react_output, 1.0e6 / clk as f64, audio_b64, &audio_type));
+                outer_react = Some(ReactExporter::new(
+                    &cli.react_output,
+                    1.0e6 / clk as f64,
+                    audio_b64,
+                    &audio_type,
+                ));
             } else if !preload {
-                clplayer = Some(AudioPlayer::new(&video_input, audio_input.clone(), cli.player.clone(), false, &ffmpeg_path));
+                clplayer = Some(AudioPlayer::new(
+                    &video_input,
+                    audio_input.clone(),
+                    cli.player.clone(),
+                    false,
+                    &ffmpeg_path,
+                ));
                 outer_printer = Some(Printer::new(clk, cli.not_clear));
             } else {
                 outer_preload = Some(Preloader::new(&output, enc_x, enc_y, clk).unwrap());
@@ -168,7 +178,7 @@ async fn main() {
             i += 1;
             continue;
         }
-        
+
         // A/V Sync: If video is lagging behind the timer, skip rendering/printing
         if let Some(ref p) = outer_printer {
             let target_frame = p.get_target_frame();
@@ -180,7 +190,7 @@ async fn main() {
         }
 
         enc.refresh_buffer();
-        
+
         let buf_size = enc.buffer_size();
         let buf = enc.buffer();
 
@@ -191,18 +201,18 @@ async fn main() {
         } else if let Some(ref mut p) = outer_react {
             p.add_frame(&buf[0..buf_size]);
         }
-        
+
         if let Some(ref mut p) = outer_web {
             p.add_frame(&buf[0..buf_size]);
         }
-        
+
         frame_sent += 1;
         i += 1;
     }
 
     if let Some(ref mut _p) = outer_printer {
-         // Show cursor before exit
-         print!("\x1b[?25h");
+        // Show cursor before exit
+        print!("\x1b[?25h");
     }
 
     enc.cls();
@@ -214,8 +224,9 @@ async fn main() {
     }
 }
 
-
+#[cfg(target_os = "windows")]
 const BUNDLED_FFMPEG: &[u8] = include_bytes!("..\\bin\\ffmpeg.exe");
+#[cfg(target_os = "windows")]
 const BUNDLED_FFPROBE: &[u8] = include_bytes!("..\\bin\\ffprobe.exe");
 
 async fn find_or_download_ytdlp(path_hint: Option<&str>) -> Result<String, String> {
@@ -225,52 +236,95 @@ async fn find_or_download_ytdlp(path_hint: Option<&str>) -> Result<String, Strin
         }
     }
 
-    if Command::new("yt-dlp").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok() {
+    if Command::new("yt-dlp")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok()
+    {
         return Ok("yt-dlp".to_string());
     }
 
     let mut exe_path = dirs::cache_dir().unwrap_or_else(|| Path::new(".").to_path_buf());
+    #[cfg(target_os = "windows")]
     exe_path.push("yt-dlp.exe");
+    #[cfg(not(target_os = "windows"))]
+    exe_path.push("yt-dlp");
 
     if exe_path.exists() {
         return Ok(exe_path.to_string_lossy().to_string());
     }
 
     println!("yt-dlp not found. Downloading to {:?}...", exe_path);
+    #[cfg(target_os = "windows")]
     let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
-    let response = reqwest::get(url).await.map_err(|e| format!("Download error: {}", e))?;
-    let content = response.bytes().await.map_err(|e| format!("Content error: {}", e))?;
+    #[cfg(not(target_os = "windows"))]
+    let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+    let response = reqwest::get(url)
+        .await
+        .map_err(|e| format!("Download error: {}", e))?;
+    let content = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Content error: {}", e))?;
     std::fs::write(&exe_path, &content).map_err(|e| format!("Write error: {}", e))?;
     Ok(exe_path.to_string_lossy().to_string())
 }
 
 fn find_ffmpeg_tools() -> (String, String) {
     // 1. Check system path first
-    if Command::new("ffmpeg").arg("-version").stdout(Stdio::null()).status().is_ok() {
-        if Command::new("ffprobe").arg("-version").stdout(Stdio::null()).status().is_ok() {
+    if Command::new("ffmpeg")
+        .arg("-version")
+        .stdout(Stdio::null())
+        .status()
+        .is_ok()
+    {
+        if Command::new("ffprobe")
+            .arg("-version")
+            .stdout(Stdio::null())
+            .status()
+            .is_ok()
+        {
             return ("ffmpeg".to_string(), "ffprobe".to_string());
         }
     }
 
     // 2. Check current/cache folder
+    #[cfg(target_os = "windows")]
     let base_path = dirs::cache_dir().unwrap_or_else(|| Path::new(".").to_path_buf());
-    
-    let ffmpeg_exe = base_path.join("ffmpeg.exe");
-    let ffprobe_exe = base_path.join("ffprobe.exe");
 
-    if !ffmpeg_exe.exists() || !ffprobe_exe.exists() {
-        println!("Extracting bundled FFmpeg tools to {:?}...", base_path);
-        let _ = std::fs::write(&ffmpeg_exe, BUNDLED_FFMPEG);
-        let _ = std::fs::write(&ffprobe_exe, BUNDLED_FFPROBE);
-    }
+    #[cfg(target_os = "windows")]
+    {
+        let ffmpeg_exe = base_path.join("ffmpeg.exe");
+        let ffprobe_exe = base_path.join("ffprobe.exe");
 
-    if ffmpeg_exe.exists() && ffprobe_exe.exists() {
-        return (ffmpeg_exe.to_string_lossy().to_string(), ffprobe_exe.to_string_lossy().to_string());
+        if !ffmpeg_exe.exists() || !ffprobe_exe.exists() {
+            println!("Extracting bundled FFmpeg tools to {:?}...", base_path);
+            let _ = std::fs::write(&ffmpeg_exe, BUNDLED_FFMPEG);
+            let _ = std::fs::write(&ffprobe_exe, BUNDLED_FFPROBE);
+        }
+
+        if ffmpeg_exe.exists() && ffprobe_exe.exists() {
+            return (
+                ffmpeg_exe.to_string_lossy().to_string(),
+                ffprobe_exe.to_string_lossy().to_string(),
+            );
+        }
     }
 
     // 3. Fallback to existing logic for sibling folders if extraction fails
+    // 3. Fallback to common Unix paths or siblings
+    #[cfg(target_os = "windows")]
     let sibling_ffmpeg = "..\\Bad-Apple\\win_dep_bin\\ffmpeg\\ffmpeg.exe";
+    #[cfg(not(target_os = "windows"))]
+    let sibling_ffmpeg = "../Bad-Apple/bin/ffmpeg";
+
+    #[cfg(target_os = "windows")]
     let sibling_ffprobe = "..\\Bad-Apple\\win_dep_bin\\ffmpeg\\ffprobe.exe";
+    #[cfg(not(target_os = "windows"))]
+    let sibling_ffprobe = "../Bad-Apple/bin/ffprobe";
+
     if Path::new(sibling_ffmpeg).exists() && Path::new(sibling_ffprobe).exists() {
         return (sibling_ffmpeg.to_string(), sibling_ffprobe.to_string());
     }

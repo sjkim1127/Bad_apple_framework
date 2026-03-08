@@ -1,0 +1,26 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "bad-apple-web/package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "dist"
+            }
+        },
+        {
+            "src": "bad-apple-web/api/get-stream.ts",
+            "use": "@vercel/node"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/bad-apple-web/api/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/bad-apple-web/$1"
+        }
+    ]
+}
