@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-const youtubeDl = require('youtube-dl-exec');
+import _youtubeDl from 'youtube-dl-exec';
+const youtubeDl = _youtubeDl as any;
 
 export default async function handler(
     req: VercelRequest,
