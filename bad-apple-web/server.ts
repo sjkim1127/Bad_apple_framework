@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import youtubeDl from 'youtube-dl-exec';
+import ytdl from '@distube/ytdl-core';
 
 const app = express();
 app.use(cors());
@@ -12,28 +12,17 @@ app.post('/api/get-stream', async (req, res) => {
 
     try {
         console.log(`Extracting stream URL for: ${url}`);
-        const result = await youtubeDl(url, {
-            dumpSingleJson: true,
-            noWarnings: true,
-            noCheckCertificates: true,
-            preferFreeFormats: true,
-            youtubeSkipDashManifest: true,
-        });
 
-        const rawResult: any = result;
+        const info = await ytdl.getInfo(url);
 
-        // Try to find an MP4 video format
-        const format = rawResult.formats.find(
-            (f: any) => f.ext === 'mp4' && f.vcodec !== 'none' && f.acodec !== 'none'
-        ) || rawResult.formats.find(
-            (f: any) => f.vcodec !== 'none'
-        );
+        // Find format with both video & audio, highest quality, or video only fallback
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highest' });
 
         if (!format || !format.url) {
             throw new Error('No valid video stream URL found');
         }
 
-        res.json({ streamUrl: format.url, title: rawResult.title });
+        res.json({ streamUrl: format.url, title: info.videoDetails.title });
     } catch (error: any) {
         console.error('Error extracting URL:', error.message);
         res.status(500).json({ error: 'Failed to extract stream URL', details: error.message });

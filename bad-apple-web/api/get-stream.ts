@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import _youtubeDl from 'youtube-dl-exec';
-const youtubeDl = _youtubeDl as any;
+import ytdl from '@distube/ytdl-core';
 
 export default async function handler(
     req: VercelRequest,
@@ -33,28 +32,16 @@ export default async function handler(
     try {
         console.log(`Extracting stream URL for: ${url}`);
 
-        // Note: Vercel serverless functions have a 10s execution limit on free tier.
-        // Fetching formats from YouTube might occasionally take longer, leading to timeouts.
-        const result: any = await youtubeDl(url, {
-            dumpSingleJson: true,
-            noWarnings: true,
-            noCheckCertificates: true,
-            preferFreeFormats: true,
-            youtubeSkipDashManifest: true,
-        });
+        const info = await ytdl.getInfo(url);
 
-        // Try to find an MP4 video format
-        const format = result.formats.find(
-            (f: any) => f.ext === 'mp4' && f.vcodec !== 'none' && f.acodec !== 'none'
-        ) || result.formats.find(
-            (f: any) => f.vcodec !== 'none'
-        );
+        // Find format with both video & audio, highest quality, or video only fallback
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highest' });
 
         if (!format || !format.url) {
             throw new Error('No valid video stream URL found');
         }
 
-        res.status(200).json({ streamUrl: format.url, title: result.title });
+        res.status(200).json({ streamUrl: format.url, title: info.videoDetails.title });
     } catch (error: any) {
         console.error('Error extracting URL:', error.message);
         res.status(500).json({ error: 'Failed to extract stream URL', details: error.message });
