@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+// @ts-ignore
 import youtubeDl from 'youtube-dl-exec';
 
 export default async function handler(
