@@ -1,0 +1,15 @@
+{
+  "name": "bad-apple-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "bad_apple_wasm_bg.wasm",
+    "bad_apple_wasm.js",
+    "bad_apple_wasm.d.ts"
+  ],
+  "main": "bad_apple_wasm.js",
+  "types": "bad_apple_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
